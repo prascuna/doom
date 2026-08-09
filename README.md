@@ -1,1 +1,1 @@
-# doom
+# Doom Emacs config
