@@ -86,3 +86,89 @@
 (define-key key-translation-map (kbd "s-k") (kbd "<up>"))
 (define-key key-translation-map (kbd "s-h") (kbd "<left>"))
 (define-key key-translation-map (kbd "s-l") (kbd "<right>"))
+
+;; `diff-hl-show-hunk-mouse-mode' is buffer-local, so enabling it once at load
+;; time only affects whichever buffer happened to be current. Use the globalized
+;; variant, which turns it on in every existing buffer *and* every future one.
+(after! diff-hl
+  (global-diff-hl-show-hunk-mouse-mode +1))
+(map! :leader :desc "Show hunk at point" "g h" #'diff-hl-show-hunk)
+;; Eric Dallo https://gist.github.com/ericdallo/09217734a925148976e13b872b91e134
+(setq read-process-output-max (* 1024 1024)
+      ;; doom-localleader-key "," ;; easier than <SPC m>
+      ;; doom-font (font-spec :family "JetBrainsMono Nerd Font Mono" :size 18) ;; Make sure to use a font you have installed
+      ;; doom-theme 'doom-dracula
+      projectile-project-search-path '("~/Documents/workspace") ;; Change this to your base path for projects
+      projectile-enable-caching nil)
+
+(add-to-list 'default-frame-alist '(fullscreen . maximized))
+
+(after! lsp-mode
+  (setq lsp-semantic-tokens-enable t)
+  (add-hook 'lsp-after-apply-edits-hook (lambda (&rest _) (save-buffer))) ;; save buffers after renaming
+
+  ;; Metabase is huge; keep lsp-mode's file watcher from choking on it.
+  ;; (node_modules, .git etc. are already in lsp-mode's default list.)
+  (setq lsp-file-watch-threshold 10000)
+  (dolist (dir '("[/\\\\]target\\'"
+                 "[/\\\\]\\.clj-kondo/\\.cache\\'"
+                 "[/\\\\]resources[/\\\\]frontend_client\\'"))
+    (add-to-list 'lsp-file-watch-ignored-directories dir)))
+
+;; Doom's `(clojure +lsp)` hands completion/eldoc/navigation entirely to
+;; clojure-lsp. Undo that: CIDER's capf/eldoc/lookup no-op when there's no REPL,
+;; so keeping both in the chain means CIDER wins while connected and LSP
+;; transparently covers everything else.
+(after! cider
+  (remove-hook 'cider-mode-hook #'+clojure--cider-disable-completion)
+  (setq cider-eldoc-display-for-symbol-at-point t)
+  (set-lookup-handlers! '(cider-mode cider-repl-mode)
+    :definition    #'+clojure-cider-lookup-definition
+    :documentation #'cider-doc))
+
+;; lsp-mode starts from `clojure-mode-local-vars-hook', which runs *after*
+;; `clojure-mode-hook' where `cider-mode' turns on. Both push onto the front of
+;; the capf/lookup lists, so LSP would otherwise always end up first. Re-assert
+;; the order from whichever side happens to start last.
+(defun +clojure--prioritize (var fn)
+  (when (memq fn (symbol-value var))
+    (set (make-local-variable var) (cons fn (remq fn (symbol-value var))))))
+
+(defun +clojure-cider-first-h ()
+  "Rank CIDER ahead of clojure-lsp for completion, docs and navigation.
+CIDER's handlers return nil (or error) without a REPL, and Doom's
+`+lookup--run-handlers' falls through on error, so LSP still answers
+whenever no REPL is connected."
+  (when (bound-and-true-p cider-mode)
+    (+clojure--prioritize 'completion-at-point-functions #'cider-complete-at-point)
+    (+clojure--prioritize '+lookup-definition-functions #'+clojure-cider-lookup-definition)
+    (+clojure--prioritize '+lookup-documentation-functions #'cider-doc)))
+
+(add-hook 'cider-mode-hook #'+clojure-cider-first-h 'append)
+(add-hook 'lsp-mode-hook #'+clojure-cider-first-h 'append)
+(add-hook 'lsp-completion-mode-hook #'+clojure-cider-first-h 'append)
+
+;; Save automatically instead of formatting automatically: `:editor format' no
+;; longer carries +onsave, so reformatting is a deliberate `SPC c f'. super-save
+;; writes the buffer at natural pauses (window/buffer switch, losing focus) plus
+;; a short idle timer, so `:w' becomes unnecessary without hammering
+;; clojure-lsp's didSave on every keystroke pause.
+(use-package! super-save
+  :hook (doom-first-file . super-save-mode)
+  :config
+  (setq super-save-auto-save-when-idle t
+        super-save-idle-duration 5
+        ;; Saves are constant now; don't echo "Wrote ..." over everything else.
+        super-save-silent t
+        ;; Saving over TRAMP on a timer will freeze Emacs on a slow link.
+        super-save-remote-files nil)
+  ;; NOTE: `super-save-triggers' is deliberately left empty. Since 0.5.0 the
+  ;; defaults `super-save-when-buffer-switched' and `super-save-when-focus-lost'
+  ;; hook `window-selection-change-functions' and `after-focus-change-function',
+  ;; which already catch every evil/Doom window motion regardless of command.
+  )
+
+;; Metabase settings ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(add-to-list 'exec-path (expand-file-name "~/.local/share/mise/shims"))
+(setenv "PATH" (concat (expand-file-name "~/.local/share/mise/shims") ":" (getenv "PATH")))
+

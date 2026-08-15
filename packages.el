@@ -51,3 +51,9 @@
 ;; (unpin! pinned-package another-pinned-package)
 ;; ...Or *all* packages (NOT RECOMMENDED; will likely break things)
 ;; (unpin! t)
+
+;; Paolo's config ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; NOTE: lsp-treemacs is declared (and pinned) by :ui treemacs +lsp whenever
+;; :tools lsp is enabled without +eglot, so it needs no declaration here.
+
+(package! super-save)
