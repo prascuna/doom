@@ -103,6 +103,12 @@
 
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
 
+;; Emacs packs lines tighter than IntelliJ, which uses a 1.2 line height. A float
+;; `line-spacing' adds that fraction of the line height below every line; 0.15
+;; lands close to IntelliJ once Emacs' own font leading is counted, and scales
+;; automatically with `doom-font' size and `doom-big-font-mode'.
+(setq-default line-spacing 0.15)
+
 (after! lsp-mode
   (setq lsp-semantic-tokens-enable t)
   (add-hook 'lsp-after-apply-edits-hook (lambda (&rest _) (save-buffer))) ;; save buffers after renaming
@@ -167,6 +173,23 @@ whenever no REPL is connected."
   ;; hook `window-selection-change-functions' and `after-focus-change-function',
   ;; which already catch every evil/Doom window motion regardless of command.
   )
+
+;; Magit ships `magit-insert-worktrees' but leaves it out of
+;; `magit-status-sections-hook', so worktrees are invisible in `SPC g g'. Slot it
+;; in right after the status headers: it's repo-level information, and it inserts
+;; nothing at all when the repo has only one worktree, so ordinary repos are
+;; unaffected. RET visits a worktree, k deletes it (`magit-worktree-section-map').
+(after! magit
+  (magit-add-section-hook 'magit-status-sections-hook
+                          #'magit-insert-worktrees
+                          #'magit-insert-status-headers
+                          'append))
+
+;; `magit-worktree-status' completes over `magit-list-worktrees' (minus the
+;; current one), so it doubles as a list-and-jump command. Unlike the
+;; `magit-worktree' transient it carries no autoload cookie, so declare one.
+(autoload 'magit-worktree-status "magit-worktree" nil t)
+(map! :leader :desc "List worktrees" "g l w" #'magit-worktree-status)
 
 ;; Metabase settings ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (add-to-list 'exec-path (expand-file-name "~/.local/share/mise/shims"))
