@@ -109,6 +109,12 @@
 ;; automatically with `doom-font' size and `doom-big-font-mode'.
 (setq-default line-spacing 0.15)
 
+;; macOS' default is Menlo 12; 13 is one notch up without the jump you get from
+;; `doom/increase-font-size', which steps by `doom-font-increment' (2) at a time.
+;; Drop that to 1 so `SPC =' style adjustments are fine-grained too.
+(setq doom-font (font-spec :family "Menlo" :size 13)
+      doom-font-increment 1)
+
 (after! lsp-mode
   (setq lsp-semantic-tokens-enable t)
   (add-hook 'lsp-after-apply-edits-hook (lambda (&rest _) (save-buffer))) ;; save buffers after renaming
