@@ -87,6 +87,14 @@
 (define-key key-translation-map (kbd "s-h") (kbd "<left>"))
 (define-key key-translation-map (kbd "s-l") (kbd "<right>"))
 
+;; IntelliJ's Navigate Back/Forward. Aliases for `C-o'/`C-i', which Doom remaps
+;; onto better-jumper; the jump list holds markers, so these cross files, and
+;; `+lookup/definition' (gd) records its origin, making gd -> s-[ a round trip.
+;; Bound globally rather than per-evil-state so they also work mid-insert and in
+;; non-evil buffers (magit, dired), the way a Cmd chord is expected to.
+(map! "s-[" #'better-jumper-jump-backward
+      "s-]" #'better-jumper-jump-forward)
+
 ;; `diff-hl-show-hunk-mouse-mode' is buffer-local, so enabling it once at load
 ;; time only affects whichever buffer happened to be current. Use the globalized
 ;; variant, which turns it on in every existing buffer *and* every future one.
