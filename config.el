@@ -120,10 +120,24 @@
   (add-hook 'lsp-after-apply-edits-hook (lambda (&rest _) (save-buffer))) ;; save buffers after renaming
 
   ;; Metabase is huge; keep lsp-mode's file watcher from choking on it.
-  ;; (node_modules, .git etc. are already in lsp-mode's default list.)
+  ;; (node_modules, .git, target, .clj-kondo etc. are already in lsp-mode's
+  ;; default list -- `lsp-file-watch-ignored-directories' is matched against each
+  ;; directory's absolute path as the tree is walked.)
   (setq lsp-file-watch-threshold 10000)
-  (dolist (dir '("[/\\\\]target\\'"
-                 "[/\\\\]\\.clj-kondo/\\.cache\\'"
+  (dolist (dir '(;; The worktrees live *inside* the main checkout
+                 ;; (<repo>/.claude/worktrees/<branch>) and each is a full
+                 ;; checkout, so from the main root they are ~20,000 of the
+                 ;; ~25,600 directories lsp would watch -- over the threshold
+                 ;; above, hence the "watch all files?" prompt. That prompt's
+                 ;; answer is never persisted, so it returns on every restart;
+                 ;; pruning is the only real fix. Leaves ~5,200.
+                 ;;
+                 ;; This one entry also scopes the *other* direction: the walk
+                 ;; in `lsp--all-watchable-directories' seeds its stack with the
+                 ;; root and never ignore-tests it, so from inside a worktree
+                 ;; (which has no .claude/worktrees of its own) only that
+                 ;; worktree is watched.
+                 "[/\\\\]\\.claude[/\\\\]worktrees\\'"
                  "[/\\\\]resources[/\\\\]frontend_client\\'"))
     (add-to-list 'lsp-file-watch-ignored-directories dir)))
 
@@ -196,6 +210,11 @@ whenever no REPL is connected."
 ;; `magit-worktree' transient it carries no autoload cookie, so declare one.
 (autoload 'magit-worktree-status "magit-worktree" nil t)
 (map! :leader :desc "List worktrees" "g l w" #'magit-worktree-status)
+
+;; `+worktree/switch' (SPC g w) goes further: it moves every open buffer to the
+;; same relative path in the target worktree, keeping the window layout, and
+;; adds a modeline segment naming the worktree you are in.
+(load! "worktree")
 
 ;; Metabase settings ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (add-to-list 'exec-path (expand-file-name "~/.local/share/mise/shims"))
