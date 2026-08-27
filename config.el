@@ -95,11 +95,62 @@
 (map! "s-[" #'better-jumper-jump-backward
       "s-]" #'better-jumper-jump-forward)
 
+(defun +diff-hl-show-hunk-fn (buffer &optional line)
+  "Show the hunk in BUFFER in a child frame, falling back to an inline popup.
+`diff-hl-show-hunk-posframe' hard-errors on a TTY, so dispatch at call time
+rather than baking `display-graphic-p' in at startup (emacsclient -nw)."
+  (if (and (display-graphic-p)
+           (require 'posframe nil t)
+           (posframe-workable-p))
+      (diff-hl-show-hunk-posframe buffer line)
+    (diff-hl-show-hunk-inline buffer line)))
+
 ;; `diff-hl-show-hunk-mouse-mode' is buffer-local, so enabling it once at load
 ;; time only affects whichever buffer happened to be current. Use the globalized
 ;; variant, which turns it on in every existing buffer *and* every future one.
 (after! diff-hl
-  (global-diff-hl-show-hunk-mouse-mode +1))
+  (global-diff-hl-show-hunk-mouse-mode +1)
+
+  ;; FIX: Doom sets `diff-hl-update-async' to 'thread on Emacs <=30, but on this
+  ;; NS build every update thread hangs forever. diff-hl forces the git call to
+  ;; be *synchronous* when `window-system' is ns (its own workaround for
+  ;; debbugs#78946), and a blocking subprocess inside a Lisp thread never returns
+  ;; here -- measured in a GUI frame: with 'thread the overlay is never set and
+  ;; the `diff-hl--update-safe' thread is still alive minutes later; with nil the
+  ;; same update lands in ~30ms and repaints. (A running session had accumulated
+  ;; three stuck threads.) This is the real doomemacs/core#8554 symptom, and it
+  ;; silently swallowed every gutter update, flydiff's included. Cost of running
+  ;; on the main thread: 20-60ms for a file in the metabase repo, incurred only
+  ;; after you have already paused for `diff-hl-flydiff-delay'.
+  (setq diff-hl-update-async nil)
+
+  ;; Without `diff-hl-flydiff-mode' the gutter diffs HEAD against the file *on
+  ;; disk*, so a change only surfaces once super-save writes the buffer -- 5s of
+  ;; idle. `:ui vc-gutter' skips flydiff on macOS over doomemacs/core#8554; with
+  ;; the thread hang above out of the way, on-the-fly diffing behaves here, so opt
+  ;; back in. NOTE: enabling the mode bakes `diff-hl-flydiff-delay' into an
+  ;; idle timer, so the delay has to be set first. Enabling it also fires
+  ;; vc-gutter's `+vc-gutter-init-flydiff-mode-h', which hangs
+  ;; `diff-hl-flydiff-update' off `evil-insert-state-exit-hook' -- the bar then
+  ;; also appears the instant you leave insert state.
+  (setq diff-hl-flydiff-delay 0.2)  ; Doom sets 0.5, upstream default is 0.3
+  (diff-hl-flydiff-mode +1)
+
+  ;; The default inline backend sizes its popup to the number of *deleted* lines
+  ;; in the hunk, so a one-line edit yields a one-line window you scroll a row at
+  ;; a time. A posframe renders the whole hunk in a child frame auto-fitted to
+  ;; its content (flipping above point when there's no room below), floating over
+  ;; the buffer rather than pushing text down, with a header line of
+  ;; Close/Prev/Next/Revert/Stage buttons.
+  (setq diff-hl-show-hunk-function #'+diff-hl-show-hunk-fn
+        diff-hl-show-hunk-posframe-internal-border-width 2)
+  ;; Its border colour defaults to a hard-coded #00ffff; borrow the theme's.
+  (add-hook! 'doom-load-theme-hook :append
+    (defun +diff-hl-posframe-border-h ()
+      (setq diff-hl-show-hunk-posframe-internal-border-color
+            (let ((c (face-attribute 'vertical-border :foreground nil t)))
+              (if (stringp c) c "#5B6268")))))
+  (+diff-hl-posframe-border-h))
 (map! :leader :desc "Show hunk at point" "g h" #'diff-hl-show-hunk)
 ;; Eric Dallo https://gist.github.com/ericdallo/09217734a925148976e13b872b91e134
 (setq read-process-output-max (* 1024 1024)

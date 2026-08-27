@@ -57,3 +57,8 @@
 ;; :tools lsp is enabled without +eglot, so it needs no declaration here.
 
 (package! super-save)
+
+;; Child-frame backend for `diff-hl-show-hunk' (see config.el). Already on disk
+;; as a transitive dependency of cfrs (:ui treemacs); declared here so it
+;; survives a module change rather than disappearing with treemacs.
+(package! posframe)
